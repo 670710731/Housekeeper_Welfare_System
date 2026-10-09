@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"backend/config"
-	"backend/models"
+	"Housekeeper_Welfare_System/config"
+	"Housekeeper_Welfare_System/models"
 	"github.com/gin-gonic/gin"
 )
 

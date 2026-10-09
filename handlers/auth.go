@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
-	"backend/config"
-	"backend/models"
-	"backend/middleware"
+	"Housekeeper_Welfare_System/config"
+	"Housekeeper_Welfare_System/models"
+	"Housekeeper_Welfare_System/middleware"
 )
 
 type LoginInput struct {
