@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_URL = import.meta.env.VITE_API_URL?.trim() || '';
 
 export const apiRequest = async (path, options = {}) => {
   const headers = new Headers(options.headers || {});
@@ -14,7 +14,7 @@ export const apiRequest = async (path, options = {}) => {
   try {
     response = await fetch(`${API_URL}${path}`, { ...options, headers });
   } catch {
-    throw new Error(`เชื่อมต่อ Backend ไม่ได้ (${API_URL})`);
+    throw new Error(`เชื่อมต่อ Backend ไม่ได้ (${API_URL || 'Vite proxy'})`);
   }
 
   const payload = await response.json().catch(() => ({}));
