@@ -66,6 +66,13 @@ func DecideRequest(c *gin.Context) {
 		return
 	}
 
+	var policy models.WelfarePolicy
+	if err := tx.Where("welfare_type_id = ? AND status = 'active'", request.WelfareTypeID).First(&policy).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่พบสิทธิ์สวัสดิการที่ใช้งานอยู่สำหรับคำขอนี้"})
+		return
+	}
+
 	// 1. กรณีอนุมัติ (Approved) -> ต้องทำการหักยอดสิทธิ์คงเหลือจริง (BR-03)
 	if input.Status == "approved" {
 		var remain models.BenefitRemain
@@ -94,7 +101,11 @@ func DecideRequest(c *gin.Context) {
 
 	// 2. อัปเดตสถานะคำขอ
 	request.Status = input.Status
-	tx.Save(&request)
+	if err := tx.Save(&request).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตสถานะคำขอล้มเหลว"})
+		return
+	}
 
 	// 3. บันทึกข้อมูลการอนุมัติ (ApprovalWelfare)
 	approval := models.ApprovalWelfare{
@@ -104,21 +115,33 @@ func DecideRequest(c *gin.Context) {
 		ApprovalStatus:     input.Status,
 		Notes:              input.Notes,
 	}
-	tx.Create(&approval)
+	if err := tx.Create(&approval).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "บันทึกผลการอนุมัติล้มเหลว"})
+		return
+	}
 
 	// 4. บันทึกประวัติสวัสดิการ (Welfare History)
 	history := models.WelfareHistory{
 		EmployeeID:       request.EmployeeID,
 		WelfareTypeID:    request.WelfareTypeID,
 		WelfareRequestID: request.WelfareRequestID,
+		PolicyID:         policy.PolicyID,
 		ApprovalID:       &approval.ApprovalID,
 		ActionType:       input.Status,
 		ActionDate:       time.Now(),
 		Description:      fmt.Sprintf("คำขอได้รับการ %s โดย HR: %s", input.Status, input.Notes),
 	}
-	tx.Create(&history)
+	if err := tx.Create(&history).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "บันทึกประวัติการอนุมัติล้มเหลว"})
+		return
+	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ยืนยันผลการอนุมัติล้มเหลว"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "ดำเนินการพิจารณาคำขอเรียบร้อยแล้ว", "status": input.Status})
 }
 
