@@ -62,8 +62,8 @@ export const ApprovalView = () => {
   };
 
   // ฟังก์ชันเมื่อกดยืนยันใน Reject Modal (UC-08)
-  const handleConfirmReject = (requestId, reason) => {
-    rejectRequest(requestId, reason);
+  const handleConfirmReject = async (requestId, reason) => {
+    return rejectRequest(requestId, reason);
   };
 
   return (

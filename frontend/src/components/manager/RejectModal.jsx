@@ -18,13 +18,15 @@ export const RejectModal = ({ isOpen, onClose, request, onConfirmReject }) => {
 
   if (!isOpen || !request) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!rejectReason.trim()) return;
 
-    onConfirmReject(request.id, rejectReason.trim());
-    setRejectReason('');
-    onClose();
+    const success = await onConfirmReject(request.id, rejectReason.trim());
+    if (success) {
+      setRejectReason('');
+      onClose();
+    }
   };
 
   // ตัวอย่างเหตุผลสำเร็จรูปเพื่อความสะดวกรวดเร็วในการ Demo

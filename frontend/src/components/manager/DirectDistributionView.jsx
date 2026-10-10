@@ -42,18 +42,20 @@ export const DirectDistributionView = () => {
   const housekeepers = users.filter((u) => u.role === 'housekeeper');
 
   // State ฟอร์มแจกจ่าย
-  const [selectedUserId, setSelectedUserId] = useState(housekeepers[0]?.id || 'HK01');
-  const [selectedWelfareId, setSelectedWelfareId] = useState('WF03'); // ค่าเริ่มต้น: ชุดยูนิฟอร์ม
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedWelfareId, setSelectedWelfareId] = useState('');
   const [amount, setAmount] = useState(1);
   const [note, setNote] = useState('');
   const [searchLogQuery, setSearchLogQuery] = useState('');
 
   // ค้นหาสิทธิคงเหลือของแม่บ้านคนนี้สำหรับรายการที่เลือก
+  const activeUserId = selectedUserId || housekeepers[0]?.id || '';
+  const activeWelfareId = selectedWelfareId || welfarePolicies.find((policy) => policy.category === 'item')?.id || welfarePolicies[0]?.id || '';
   const currentEntitlement = entitlements.find(
-    (e) => e.userId === selectedUserId && e.welfareId === selectedWelfareId
+    (e) => e.userId === activeUserId && e.welfareId === activeWelfareId
   );
-  const selectedPolicy = welfarePolicies.find((p) => p.id === selectedWelfareId);
-  const selectedUser = users.find((u) => u.id === selectedUserId);
+  const selectedPolicy = welfarePolicies.find((p) => p.id === activeWelfareId);
+  const selectedUser = users.find((u) => u.id === activeUserId);
 
   const remainingQuota = currentEntitlement ? currentEntitlement.remaining : 0;
   const unit = selectedPolicy ? selectedPolicy.unit : 'หน่วย';
@@ -64,13 +66,13 @@ export const DirectDistributionView = () => {
   const canSubmit = !isExceeding && !isInvalid && remainingQuota > 0;
 
   // ส่งฟอร์มบันทึกการแจกจ่าย
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
 
-    const success = recordDirectDistribution({
-      userId: selectedUserId,
-      welfareId: selectedWelfareId,
+    const success = await recordDirectDistribution({
+      userId: activeUserId,
+      welfareId: activeWelfareId,
       amount: Number(amount),
       note: note.trim() || `แจกจ่ายตรง ณ เคาน์เตอร์ประจำวัน`
     });
@@ -134,7 +136,7 @@ export const DirectDistributionView = () => {
                 1. เลือกแม่บ้านผู้รับของ <span className="text-red-500">*</span>
               </label>
               <select
-                value={selectedUserId}
+                value={activeUserId}
                 onChange={(e) => setSelectedUserId(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-white border border-[#E2E8F0] rounded-xl focus:ring-2 focus:ring-[#2563EB] outline-none font-medium"
               >
@@ -152,7 +154,7 @@ export const DirectDistributionView = () => {
                 2. เลือกประเภทสวัสดิการ / สิ่งของ <span className="text-red-500">*</span>
               </label>
               <select
-                value={selectedWelfareId}
+                value={activeWelfareId}
                 onChange={(e) => setSelectedWelfareId(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-white border border-[#E2E8F0] rounded-xl focus:ring-2 focus:ring-[#2563EB] outline-none font-medium"
               >

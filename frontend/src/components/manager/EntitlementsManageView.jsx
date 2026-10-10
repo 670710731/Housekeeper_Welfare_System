@@ -46,8 +46,8 @@ export const EntitlementsManageView = () => {
   };
 
   // บันทึกการแก้ไข (UC-10)
-  const handleSaveEdit = (entId) => {
-    const success = updateEntitlementQuota(entId, newQuotaValue);
+  const handleSaveEdit = async (entId) => {
+    const success = await updateEntitlementQuota(entId, newQuotaValue);
     if (success) {
       setEditingEntitlementId(null);
     }

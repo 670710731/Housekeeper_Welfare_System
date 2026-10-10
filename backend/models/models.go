@@ -73,7 +73,8 @@ type WelfareRequest struct {
 	Quantity         int         `gorm:"column:quantity" json:"quantity"`
 	Reason           string      `gorm:"column:reason" json:"reason"`
 	Status           string      `gorm:"column:status" json:"status"` // pending, approved, rejected
-	Attachments      []Attachment `gorm:"foreignKey:WelfareRequestID" json:"attachments,omitempty"`
+	Attachments      []Attachment      `gorm:"foreignKey:WelfareRequestID" json:"attachments,omitempty"`
+	Approvals        []ApprovalWelfare `gorm:"foreignKey:WelfareRequestID" json:"approvals,omitempty"`
 }
 // 7
 type Attachment struct {

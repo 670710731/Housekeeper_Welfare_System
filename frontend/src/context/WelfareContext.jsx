@@ -1,14 +1,67 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import {
-  initialUsers,
-  initialWelfarePolicies,
-  initialEntitlements,
-  initialRequests,
-  initialDistributionLogs
-} from '../data/mockData';
+import { apiRequest } from './api';
 
 // สร้าง Context สำหรับแชร์ State และฟังก์ชันทางธุรกิจให้ทุก Component
 const WelfareContext = createContext();
+
+const toStatus = (status = '') => status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+
+const mapEmployee = (employee) => ({
+  id: String(employee.employee_id),
+  staffId: String(employee.employee_id),
+  name: employee.employee_name,
+  role: employee.role?.toLowerCase() === 'hr' ? 'manager' : 'housekeeper',
+  phone: employee.phone,
+  department: 'แผนกแม่บ้านหอพัก',
+  position: employee.position || 'พนักงาน',
+  shift: '-',
+  avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80'
+});
+
+const policyPresentation = (welfareType) => {
+  const name = welfareType.welfare_name || 'สวัสดิการ';
+  const lowerName = name.toLowerCase();
+  const isLeave = name.includes('ลา');
+  const isFund = /เงิน|ประกัน|รักษาพยาบาล|กองทุน/.test(name);
+  return {
+    id: String(welfareType.welfare_type_id),
+    name,
+    category: isLeave ? 'leave' : isFund ? 'fund' : 'item',
+    unit: isLeave ? 'วัน' : isFund ? 'บาท' : /เสื้อ|ชุด/.test(name) ? 'ชุด' : 'รายการ',
+    defaultQuota: 0,
+    requiresAttachment: [1, 3].includes(Number(welfareType.welfare_type_id)),
+    description: welfareType.welfare_description || '',
+    iconName: /ป่วย|สุขภาพ/.test(name) ? 'HeartPulse' : /ลา/.test(name) ? 'Calendar' : /เสื้อ|ชุด/.test(name) ? 'Shirt' : isFund ? 'CircleDollarSign' : 'Sparkles'
+  };
+};
+
+const mapEntitlement = (remain) => ({
+  id: String(remain.benefit_id || remain.benefit?.benefit_id || remain.remain_id),
+  userId: String(remain.benefit?.employee_id || ''),
+  welfareId: String(remain.benefit?.welfare_type_id || ''),
+  policyId: String(remain.benefit?.policy_id || ''),
+  totalQuota: Number(remain.total_benefit || 0),
+  used: Number(remain.total_used || 0),
+  remaining: Number(remain.remaining_amount || 0),
+  year: Number(remain.year || new Date().getFullYear())
+});
+
+const mapHistory = (entry, users, welfarePolicies) => {
+  const quantity = Number(entry.description?.match(/จำนวน\s*(\d+)/)?.[1] || 0);
+  return {
+    id: String(entry.welfare_history_id),
+    userId: String(entry.employee_id),
+    welfareId: String(entry.welfare_type_id),
+    amount: quantity,
+    handledBy: '',
+    note: entry.description || '',
+    date: entry.action_date,
+    source: entry.action_type,
+    policyName: welfarePolicies.find((policy) => policy.id === String(entry.welfare_type_id))?.name || 'สวัสดิการ',
+    unit: welfarePolicies.find((policy) => policy.id === String(entry.welfare_type_id))?.unit || '',
+    userName: users.find((user) => user.id === String(entry.employee_id))?.name || 'ไม่ระบุชื่อ'
+  };
+};
 
 /**
  * ==============================================================================
@@ -25,11 +78,11 @@ export const WelfareProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
 
   // 2. [STATE] ตารางข้อมูลจำลอง (เสมือนดึงมาจากตารางใน Database)
-  const [users, setUsers] = useState(initialUsers);
-  const [welfarePolicies, setWelfarePolicies] = useState(initialWelfarePolicies);
-  const [entitlements, setEntitlements] = useState(initialEntitlements);
-  const [requests, setRequests] = useState(initialRequests);
-  const [distributionLogs, setDistributionLogs] = useState(initialDistributionLogs);
+  const [users, setUsers] = useState([]);
+  const [welfarePolicies, setWelfarePolicies] = useState([]);
+  const [entitlements, setEntitlements] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [distributionLogs, setDistributionLogs] = useState([]);
 
   // 3. [STATE] การแจ้งเตือนแบบ Toast Message เพื่อ UX ที่ดี
   const [toast, setToast] = useState(null);
@@ -40,36 +93,136 @@ export const WelfareProvider = ({ children }) => {
     setTimeout(() => setToast(null), 3500);
   };
 
+  const loadData = async (user) => {
+    const [types, rawPolicies] = await Promise.all([
+      apiRequest('/api/welfare-types'),
+      apiRequest('/api/policies')
+    ]);
+    const policyRows = Array.isArray(rawPolicies) ? rawPolicies : [];
+    const typesWithPolicies = (Array.isArray(types) ? types : []).map((type) => {
+      const policy = policyRows.find((row) => row.welfare_type_id === type.welfare_type_id);
+      const mapped = policyPresentation(type);
+      if (policy) {
+        mapped.defaultQuota = Number(policy.benefit_quantity || 0);
+        mapped.description = [mapped.description, policy.condition].filter(Boolean).join(' ');
+      }
+      return mapped;
+    });
+    const activeUser = user;
+    let nextUsers = [activeUser];
+    let rawBenefits;
+    let rawRequests;
+    let rawHistory;
+
+    if (activeUser.role === 'manager') {
+      const [employees, hrRequests, benefits, history] = await Promise.all([
+        apiRequest('/api/hr/employees'),
+        apiRequest('/api/hr/requests'),
+        apiRequest('/api/hr/benefits'),
+        apiRequest('/api/hr/history')
+      ]);
+      nextUsers = (employees || []).map(mapEmployee);
+      rawRequests = hrRequests || [];
+      rawBenefits = benefits || [];
+      rawHistory = history || [];
+    } else {
+      const [benefits, employeeRequests, history] = await Promise.all([
+        apiRequest('/api/my-benefits'),
+        apiRequest('/api/my-requests'),
+        apiRequest('/api/my-history')
+      ]);
+      rawBenefits = benefits || [];
+      rawRequests = employeeRequests || [];
+      rawHistory = history || [];
+    }
+
+    const mappedRequests = rawRequests.map((request) => {
+      const mappedType = String(request.welfare_type_id);
+      const rejectedApproval = (request.approvals || []).find((approval) => approval.approval_status === 'rejected');
+      return {
+        id: String(request.welfare_request_id),
+        userId: String(request.employee_id),
+        welfareId: mappedType,
+        amount: Number(request.quantity || 0),
+        reason: request.reason || '',
+        attachmentName: request.attachments?.[0]?.file_name || '',
+        status: toStatus(request.status),
+        rejectReason: rejectedApproval?.notes || '',
+        createdAt: request.request_date ? request.request_date.replace('T', ' ').slice(0, 19) : '',
+        handledBy: '',
+        handledAt: ''
+      };
+    });
+
+    const mappedEntitlements = rawBenefits.map(mapEntitlement);
+    const mappedHistory = rawHistory.map((entry) => mapHistory(entry, nextUsers, typesWithPolicies));
+    setUsers(nextUsers);
+    setWelfarePolicies(typesWithPolicies);
+    setEntitlements(mappedEntitlements);
+    setRequests(mappedRequests);
+    setDistributionLogs(mappedHistory.filter((entry) => ['approved', 'direct_distribution', 'assign_benefit'].includes(entry.source)));
+  };
+
+  useEffect(() => {
+    const token = sessionStorage.getItem('welfare_token');
+    const savedUser = sessionStorage.getItem('welfare_user');
+    if (!token || !savedUser) return;
+    try {
+      const user = JSON.parse(savedUser);
+      setCurrentUser(user);
+      loadData(user).catch((error) => showToast(error.message, 'error'));
+    } catch {
+      sessionStorage.removeItem('welfare_token');
+      sessionStorage.removeItem('welfare_user');
+    }
+  }, []);
+
   /**
    * ==============================================================================
    * [AUTH] ฟังก์ชันจัดการการเข้าสู่ระบบและออกจากระบบ
    * ==============================================================================
    */
 
-  // [UC-01] เข้าสู่ระบบตาม User ID หรือ Staff ID
-  const login = (identifier) => {
-    if (!identifier) {
-      showToast('กรุณากรอกรหัสพนักงานหรือรหัสผู้ใช้งาน', 'error');
+  // [UC-01] เข้าสู่ระบบด้วยเบอร์โทรศัพท์และรหัสผ่านจากฐานข้อมูล
+  const login = async (phone, password) => {
+    try {
+      const result = await apiRequest('/api/login', {
+        method: 'POST',
+        body: JSON.stringify({ phone: phone.trim(), password })
+      });
+      const user = {
+        id: String(result.employee_id),
+        staffId: String(result.employee_id),
+        name: result.name,
+        role: result.role?.toLowerCase() === 'hr' ? 'manager' : 'housekeeper',
+        phone: phone.trim(),
+        department: 'แผนกแม่บ้านหอพัก',
+        position: result.role?.toLowerCase() === 'hr' ? 'เจ้าหน้าที่ HR' : 'พนักงานแม่บ้าน',
+        shift: '-',
+        avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80'
+      };
+      sessionStorage.setItem('welfare_token', result.token);
+      sessionStorage.setItem('welfare_user', JSON.stringify(user));
+      setCurrentUser(user);
+      await loadData(user);
+      showToast(`ยินดีต้อนรับคุณ ${user.name}`, 'info');
+      return true;
+    } catch (error) {
+      showToast(error.message || 'เข้าสู่ระบบไม่สำเร็จ', 'error');
       return false;
     }
-    const cleanId = String(identifier).trim().toLowerCase();
-    const user = users.find(
-      (u) =>
-        u.id.toLowerCase() === cleanId ||
-        (u.staffId && u.staffId.toLowerCase() === cleanId)
-    );
-    if (user) {
-      setCurrentUser(user);
-      showToast(`ยินดีต้อนรับคุณ ${user.name} เข้าสู่ระบบ`, 'info');
-      return true;
-    }
-    showToast('ไม่พบข้อมูลรหัสพนักงานนี้ในระบบ กรุณาตรวจสอบอีกครั้ง', 'error');
-    return false;
   };
 
   // ออกจากระบบ
   const logout = () => {
+    sessionStorage.removeItem('welfare_token');
+    sessionStorage.removeItem('welfare_user');
     setCurrentUser(null);
+    setUsers([]);
+    setWelfarePolicies([]);
+    setEntitlements([]);
+    setRequests([]);
+    setDistributionLogs([]);
     showToast('ออกจากระบบเรียบร้อยแล้ว', 'info');
   };
 
@@ -82,56 +235,23 @@ export const WelfareProvider = ({ children }) => {
    * 2. หากสิทธิคงเหลือเพียงพอ สร้างข้อมูลคำขอใหม่ (สถานะ 'Pending')
    * 3. บันทึกลง State คำขอ `requests`
    */
-  const submitWelfareRequest = ({ welfareId, amount, reason, attachmentName }) => {
+  const submitWelfareRequest = async ({ welfareId, amount, reason, attachment }) => {
     if (!currentUser) return { success: false, message: 'กรุณาเข้าสู่ระบบก่อน' };
+    const formData = new FormData();
+    formData.set('welfare_type_id', welfareId);
+    formData.set('quantity', String(amount));
+    formData.set('reason', reason.trim());
+    if (attachment) formData.set('attachment', attachment);
 
-    const parsedAmount = Number(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      showToast('กรุณาระบุจำนวนที่ถูกต้องมากกว่า 0', 'error');
-      return { success: false, message: 'จำนวนไม่ถูกต้อง' };
+    try {
+      const result = await apiRequest('/api/requests', { method: 'POST', body: formData });
+      await loadData(currentUser);
+      showToast(result.message || 'ส่งคำขอสำเร็จ', 'success');
+      return { success: true, message: result.message };
+    } catch (error) {
+      showToast(error.message, 'error');
+      return { success: false, message: error.message };
     }
-
-    // ค้นหาสิทธิคงเหลือของแม่บ้านคนนี้ในสวัสดิการที่เลือก
-    const currentEntitlement = entitlements.find(
-      (e) => e.userId === currentUser.id && e.welfareId === welfareId
-    );
-
-    const policy = welfarePolicies.find((p) => p.id === welfareId);
-    const policyName = policy ? policy.name : 'สวัสดิการ';
-    const unit = policy ? policy.unit : '';
-
-    if (!currentEntitlement) {
-      showToast('ไม่พบข้อมูลสิทธิของท่านสำหรับสวัสดิการนี้', 'error');
-      return { success: false, message: 'ไม่พบสิทธิ' };
-    }
-
-    // ตรวจสอบเงื่อนไข: สิทธิคงเหลือต้องมากกว่าหรือเท่ากับจำนวนที่ขอ
-    if (parsedAmount > currentEntitlement.remaining) {
-      showToast(
-        `ไม่สามารถยื่นคำขอได้: สิทธิคงเหลือ ${currentEntitlement.remaining} ${unit} (ขอเบิก ${parsedAmount} ${unit})`,
-        'error'
-      );
-      return { success: false, message: 'สิทธิคงเหลือไม่เพียงพอ' };
-    }
-
-    // สร้างคำขอใหม่ (New Request Entity)
-    const newRequest = {
-      id: `REQ-${new Date().getFullYear()}-${String(requests.length + 1).padStart(3, '0')}`,
-      userId: currentUser.id,
-      welfareId: welfareId,
-      amount: parsedAmount,
-      reason: reason.trim(),
-      attachmentName: attachmentName || '',
-      status: 'Pending', // เริ่มต้นที่สถานะ 'รอดำเนินการ'
-      rejectReason: '',
-      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      handledBy: null,
-      handledAt: null
-    };
-
-    setRequests([newRequest, ...requests]);
-    showToast(`ส่งคำขอ "${policyName}" จำนวน ${parsedAmount} ${unit} เรียบร้อยแล้ว`, 'success');
-    return { success: true, message: 'ส่งคำขอสำเร็จ' };
   };
 
   /**
@@ -143,77 +263,17 @@ export const WelfareProvider = ({ children }) => {
    * 2. ตัดสิทธิคงเหลือใน `employee_entitlements` (used เพิ่มขึ้น, remaining ลดลง)
    * 3. บันทึกประวัติการตัดสิทธิลงใน `distribution_logs`
    */
-  const approveRequest = (requestId) => {
-    const targetRequest = requests.find((r) => r.id === requestId);
-    if (!targetRequest) return;
-
-    if (targetRequest.status !== 'Pending') {
-      showToast('คำขอนี้ได้รับการดำเนินการไปแล้ว', 'warning');
-      return;
+  const approveRequest = async (requestId) => {
+    try {
+      const result = await apiRequest(`/api/hr/requests/${requestId}/decide`, {
+        method: 'POST',
+        body: JSON.stringify({ status: 'approved' })
+      });
+      await loadData(currentUser);
+      showToast(result.message || 'อนุมัติคำขอสำเร็จ', 'success');
+    } catch (error) {
+      showToast(error.message, 'error');
     }
-
-    const policy = welfarePolicies.find((p) => p.id === targetRequest.welfareId);
-    const applicant = users.find((u) => u.id === targetRequest.userId);
-
-    // 1. ตรวจสอบสิทธิคงเหลืออีกครั้งเพื่อป้องกัน Race Condition
-    const targetEntitlement = entitlements.find(
-      (e) => e.userId === targetRequest.userId && e.welfareId === targetRequest.welfareId
-    );
-
-    if (targetEntitlement && targetRequest.amount > targetEntitlement.remaining) {
-      showToast(`ไม่สามารถอนุมัติได้: สิทธิคงเหลือไม่เพียงพอแล้ว`, 'error');
-      return;
-    }
-
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-    // 2. อัปเดตสถานะคำขอเป็น 'Approved'
-    setRequests((prevRequests) =>
-      prevRequests.map((r) =>
-        r.id === requestId
-          ? {
-              ...r,
-              status: 'Approved',
-              handledBy: currentUser ? currentUser.id : 'MGR01',
-              handledAt: now
-            }
-          : r
-      )
-    );
-
-    // 3. ตัดสิทธิใน employee_entitlements
-    setEntitlements((prevEntitlements) =>
-      prevEntitlements.map((e) => {
-        if (e.userId === targetRequest.userId && e.welfareId === targetRequest.welfareId) {
-          const newUsed = e.used + targetRequest.amount;
-          const newRemaining = Math.max(0, e.totalQuota - newUsed);
-          return {
-            ...e,
-            used: newUsed,
-            remaining: newRemaining
-          };
-        }
-        return e;
-      })
-    );
-
-    // 4. บันทึกลงตาราง distribution_logs
-    const newLog = {
-      id: `LOG-${String(distributionLogs.length + 1).padStart(3, '0')}`,
-      userId: targetRequest.userId,
-      welfareId: targetRequest.welfareId,
-      amount: targetRequest.amount,
-      handledBy: currentUser ? currentUser.id : 'MGR01',
-      note: `อนุมัติคำขอ ${targetRequest.id} (${targetRequest.reason})`,
-      date: now,
-      source: 'Request Approval'
-    };
-    setDistributionLogs([newLog, ...distributionLogs]);
-
-    showToast(
-      `อนุมัติคำขอของ ${applicant ? applicant.name : 'แม่บ้าน'} สำเร็จ ระบบได้ตัดสิทธิเรียบร้อยแล้ว`,
-      'success'
-    );
   };
 
   /**
@@ -225,30 +285,24 @@ export const WelfareProvider = ({ children }) => {
    * 2. บันทึกเหตุผลการปฏิเสธ (Reject Reason) เพื่อให้แม่บ้านอ่านทราบ
    * 3. ไม่มีการตัดสิทธิใน employee_entitlements
    */
-  const rejectRequest = (requestId, rejectReason) => {
+  const rejectRequest = async (requestId, rejectReason) => {
     if (!rejectReason || rejectReason.trim() === '') {
       showToast('กรุณาระบุเหตุผลการไม่อนุมัติ', 'warning');
       return false;
     }
 
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-    setRequests((prevRequests) =>
-      prevRequests.map((r) =>
-        r.id === requestId
-          ? {
-              ...r,
-              status: 'Rejected',
-              rejectReason: rejectReason.trim(),
-              handledBy: currentUser ? currentUser.id : 'MGR01',
-              handledAt: now
-            }
-          : r
-      )
-    );
-
-    showToast('ปฏิเสธคำขอและบันทึกเหตุผลเรียบร้อยแล้ว', 'info');
-    return true;
+    try {
+      const result = await apiRequest(`/api/hr/requests/${requestId}/decide`, {
+        method: 'POST',
+        body: JSON.stringify({ status: 'rejected', notes: rejectReason.trim() })
+      });
+      await loadData(currentUser);
+      showToast(result.message || 'ปฏิเสธคำขอสำเร็จ', 'info');
+      return true;
+    } catch (error) {
+      showToast(error.message, 'error');
+      return false;
+    }
   };
 
   /**
@@ -260,68 +314,24 @@ export const WelfareProvider = ({ children }) => {
    * 1. ตัดสิทธิคงเหลือของแม่บ้านคนนั้นทันที
    * 2. บันทึกข้อมูลลงใน distribution_logs
    */
-  const recordDirectDistribution = ({ userId, welfareId, amount, note }) => {
-    const parsedAmount = Number(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      showToast('กรุณาระบุจำนวนที่ถูกต้อง', 'error');
+  const recordDirectDistribution = async ({ userId, welfareId, amount, note }) => {
+    try {
+      const result = await apiRequest('/api/hr/distributions', {
+        method: 'POST',
+        body: JSON.stringify({
+          employee_id: Number(userId),
+          welfare_type_id: Number(welfareId),
+          quantity: Number(amount),
+          note
+        })
+      });
+      await loadData(currentUser);
+      showToast(result.message || 'บันทึกการแจกจ่ายสำเร็จ', 'success');
+      return true;
+    } catch (error) {
+      showToast(error.message, 'error');
       return false;
     }
-
-    const targetEntitlement = entitlements.find(
-      (e) => e.userId === userId && e.welfareId === welfareId
-    );
-    const policy = welfarePolicies.find((p) => p.id === welfareId);
-    const targetUser = users.find((u) => u.id === userId);
-
-    if (!targetEntitlement) {
-      showToast('ไม่พบข้อมูลสิทธิของพนักงานคนนี้', 'error');
-      return false;
-    }
-
-    // ตรวจสอบว่าแจกเกินสิทธิคงเหลือหรือไม่
-    if (parsedAmount > targetEntitlement.remaining) {
-      showToast(
-        `ไม่สามารถจ่ายเกินสิทธิได้: คงเหลือ ${targetEntitlement.remaining} ${policy ? policy.unit : ''}`,
-        'error'
-      );
-      return false;
-    }
-
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-    // 1. ตัดสิทธิคงเหลือ
-    setEntitlements((prevEntitlements) =>
-      prevEntitlements.map((e) => {
-        if (e.userId === userId && e.welfareId === welfareId) {
-          const newUsed = e.used + parsedAmount;
-          return {
-            ...e,
-            used: newUsed,
-            remaining: Math.max(0, e.totalQuota - newUsed)
-          };
-        }
-        return e;
-      })
-    );
-
-    // 2. บันทึกลง Log
-    const newLog = {
-      id: `LOG-${String(distributionLogs.length + 1).padStart(3, '0')}`,
-      userId: userId,
-      welfareId: welfareId,
-      amount: parsedAmount,
-      handledBy: currentUser ? currentUser.id : 'MGR01',
-      note: note || `แจกจ่ายโดยตรง ณ เคาน์เตอร์ผู้จัดการ`,
-      date: now,
-      source: 'Direct Distribution'
-    };
-    setDistributionLogs([newLog, ...distributionLogs]);
-
-    showToast(
-      `บันทึกการแจกจ่าย ${policy ? policy.name : ''} ให้ ${targetUser ? targetUser.name : ''} สำเร็จ`,
-      'success'
-    );
-    return true;
   };
 
   /**
@@ -329,29 +339,25 @@ export const WelfareProvider = ({ children }) => {
    * [UC-09, UC-10] ปรับปรุงโควตาสิทธิประจำปีของแม่บ้าน (Manage Entitlements)
    * ==============================================================================
    */
-  const updateEntitlementQuota = (entitlementId, newTotalQuota) => {
+  const updateEntitlementQuota = async (entitlementId, newTotalQuota) => {
     const parsedQuota = Number(newTotalQuota);
     if (isNaN(parsedQuota) || parsedQuota < 0) {
       showToast('กรุณาระบุโควตาเป็นตัวเลขที่ถูกต้อง', 'error');
       return false;
     }
 
-    setEntitlements((prevEntitlements) =>
-      prevEntitlements.map((e) => {
-        if (e.id === entitlementId) {
-          const newRemaining = Math.max(0, parsedQuota - e.used);
-          return {
-            ...e,
-            totalQuota: parsedQuota,
-            remaining: newRemaining
-          };
-        }
-        return e;
-      })
-    );
-
-    showToast('อัปเดตโควตาสิทธิประจำปีเรียบร้อยแล้ว', 'success');
-    return true;
+    try {
+      const result = await apiRequest(`/api/hr/benefits/${entitlementId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ quantity: parsedQuota })
+      });
+      await loadData(currentUser);
+      showToast(result.message || 'อัปเดตโควตาสำเร็จ', 'success');
+      return true;
+    } catch (error) {
+      showToast(error.message, 'error');
+      return false;
+    }
   };
 
   /**
@@ -438,15 +444,15 @@ export const WelfareProvider = ({ children }) => {
 
     // คำนวณวันลาป่วยและลาพักร้อนรวมที่ถูกใช้ไปแล้วของทุกคน
     const totalSickLeaveUsed = entitlements
-      .filter((e) => e.welfareId === 'WF01')
+      .filter((e) => welfarePolicies.find((policy) => policy.id === e.welfareId)?.name.includes('ป่วย'))
       .reduce((sum, item) => sum + item.used, 0);
 
     const totalAnnualLeaveUsed = entitlements
-      .filter((e) => e.welfareId === 'WF02')
+      .filter((e) => welfarePolicies.find((policy) => policy.id === e.welfareId)?.name.includes('พักร้อน'))
       .reduce((sum, item) => sum + item.used, 0);
 
     const totalUniformUsed = entitlements
-      .filter((e) => e.welfareId === 'WF03')
+      .filter((e) => welfarePolicies.find((policy) => policy.id === e.welfareId)?.name.includes('เสื้อ'))
       .reduce((sum, item) => sum + item.used, 0);
 
     return {
@@ -463,12 +469,7 @@ export const WelfareProvider = ({ children }) => {
 
   // รีเซ็ตข้อมูลกลับสู่ค่าเริ่มต้นสำหรับการนำเสนอซ้ำ
   const resetToInitialData = () => {
-    setUsers(initialUsers);
-    setWelfarePolicies(initialWelfarePolicies);
-    setEntitlements(initialEntitlements);
-    setRequests(initialRequests);
-    setDistributionLogs(initialDistributionLogs);
-    showToast('รีเซ็ตข้อมูลสู่ค่าเริ่มต้นสำหรับการเดโมเรียบร้อย', 'info');
+    showToast('การรีเซ็ตข้อมูลต้องดำเนินการจากฐานข้อมูลโดยผู้ดูแลระบบ', 'warning');
   };
 
   const value = {

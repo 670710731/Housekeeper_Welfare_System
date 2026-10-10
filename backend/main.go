@@ -56,6 +56,7 @@ func main() {
 		// ==============================
 		api.GET("/my-benefits", handlers.GetMyBenefits)     // FR-02 & FR-03: สิทธิ์สวัสดิการและสิทธิ์คงเหลือ
 		api.GET("/policies", handlers.GetWelfarePolicies)   // FR-04: ดูนโยบายเงื่อนไข
+		api.GET("/welfare-types", handlers.GetWelfareTypes)
 		api.POST("/requests", handlers.RequestWelfare)      // FR-05 & FR-06: ส่งคำขอพร้อมเอกสารแนบ
 		api.GET("/my-requests", handlers.GetMyRequests)     // FR-07: ตรวจสอบสถานะคำขอ
 		api.GET("/my-history", handlers.GetMyHistory)       // FR-08: ประวัติการใช้งานสวัสดิการตนเอง
@@ -69,6 +70,10 @@ func main() {
 			// จัดการคำขอ (FR-09 & FR-10)
 			hrGroup.GET("/requests", handlers.GetAllRequests)      // ดูคำขอทั้งหมด
 			hrGroup.POST("/requests/:id/decide", handlers.DecideRequest) // อนุมัติ/ปฏิเสธ
+			hrGroup.GET("/benefits", handlers.GetAllBenefits)
+			hrGroup.PUT("/benefits/:id", handlers.UpdateBenefitQuota)
+			hrGroup.POST("/distributions", handlers.RecordDistribution)
+			hrGroup.GET("/history", handlers.GetAllHistory)
 
 			// กำหนดสิทธิ์ให้พนักงาน (FR-11)
 			hrGroup.POST("/benefits/assign", handlers.AssignBenefit)

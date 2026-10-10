@@ -20,7 +20,7 @@ func GetAllRequests(c *gin.Context) {
 	var requests []models.WelfareRequest
 	status := c.Query("status") // filter: pending, approved, rejected
 
-	query := config.DB.Preload("Attachments").Order("request_date desc")
+	query := config.DB.Preload("Attachments").Preload("Approvals").Order("request_date desc")
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -30,6 +30,127 @@ func GetAllRequests(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, requests)
+}
+
+func GetAllBenefits(c *gin.Context) {
+	var benefits []models.BenefitRemain
+	if err := config.DB.Preload("Benefit").Order("remain_id desc").Find(&benefits).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, benefits)
+}
+
+func GetAllHistory(c *gin.Context) {
+	var history []models.WelfareHistory
+	if err := config.DB.Order("action_date desc").Find(&history).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, history)
+}
+
+func UpdateBenefitQuota(c *gin.Context) {
+	benefitID := c.Param("id")
+	var input struct {
+		Quantity int `json:"quantity" binding:"min=0"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tx := config.DB.Begin()
+	var benefit models.EmployeeBenefit
+	if err := tx.Where("benefit_id = ? AND status = 'active'", benefitID).First(&benefit).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสิทธิ์สวัสดิการนี้"})
+		return
+	}
+	var remain models.BenefitRemain
+	if err := tx.Where("benefit_id = ?", benefit.BenefitID).First(&remain).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบยอดสิทธิ์คงเหลือ"})
+		return
+	}
+	if input.Quantity < remain.TotalUsed {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "โควตาใหม่ต้องไม่น้อยกว่าจำนวนที่ใช้ไปแล้ว"})
+		return
+	}
+
+	benefit.BenefitQuantity = input.Quantity
+	remain.TotalBenefit = input.Quantity
+	remain.RemainingAmount = input.Quantity - remain.TotalUsed
+	remain.LastUpdate = time.Now()
+	if err := tx.Save(&benefit).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตโควตาไม่สำเร็จ"})
+		return
+	}
+	if err := tx.Save(&remain).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตยอดคงเหลือไม่สำเร็จ"})
+		return
+	}
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "บันทึกโควตาไม่สำเร็จ"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "อัปเดตโควตาสำเร็จ"})
+}
+
+func RecordDistribution(c *gin.Context) {
+	var input struct {
+		EmployeeID    uint   `json:"employee_id" binding:"required"`
+		WelfareTypeID uint   `json:"welfare_type_id" binding:"required"`
+		Quantity      int    `json:"quantity" binding:"required,gt=0"`
+		Note          string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	tx := config.DB.Begin()
+	var remain models.BenefitRemain
+	err := tx.
+		Joins("JOIN employee_benefits ON employee_benefits.benefit_id = benefit_remains.benefit_id").
+		Where("employee_benefits.employee_id = ? AND employee_benefits.welfare_type_id = ? AND employee_benefits.status = 'active' AND benefit_remains.remaining_amount >= ?", input.EmployeeID, input.WelfareTypeID, input.Quantity).
+		First(&remain).Error
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่พบสิทธิ์ที่ใช้งานได้หรือสิทธิคงเหลือไม่เพียงพอ"})
+		return
+	}
+
+	remain.RemainingAmount -= input.Quantity
+	remain.TotalUsed += input.Quantity
+	remain.LastUpdate = time.Now()
+	if err := tx.Save(&remain).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ตัดยอดสิทธิ์ไม่สำเร็จ"})
+		return
+	}
+	if input.Note == "" {
+		input.Note = "แจกจ่ายสวัสดิการโดยตรง"
+	}
+	history := models.WelfareHistory{
+		EmployeeID:    input.EmployeeID,
+		WelfareTypeID: input.WelfareTypeID,
+		ActionType:    "direct_distribution",
+		ActionDate:    time.Now(),
+		Description:   fmt.Sprintf("แจกจ่ายจำนวน %d หน่วย: %s", input.Quantity, input.Note),
+	}
+	if err := tx.Create(&history).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "บันทึกประวัติการแจกจ่ายไม่สำเร็จ"})
+		return
+	}
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "บันทึกการแจกจ่ายไม่สำเร็จ"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "บันทึกการแจกจ่ายสำเร็จ"})
 }
 
 // ==========================================
@@ -114,7 +235,7 @@ func DecideRequest(c *gin.Context) {
 		ApprovalID:       approval.ApprovalID,
 		ActionType:       input.Status,
 		ActionDate:       time.Now(),
-		Description:      fmt.Sprintf("คำขอได้รับการ %s โดย HR: %s", input.Status, input.Notes),
+		Description:      fmt.Sprintf("คำขอจำนวน %d หน่วยได้รับการ %s โดย HR: %s", request.Quantity, input.Status, input.Notes),
 	}
 	tx.Create(&history)
 

@@ -21,20 +21,16 @@ import {
  * ออกแบบตาม Design System: Welfare Care
  * 
  * คุณสมบัติ:
- * 1. ฟอร์ม Input มาตรฐาน เรียบง่าย เป็นทางการ ไม่แสดงรายชื่อบัญชีสำเร็จรูป
+ * 1. ฟอร์มเข้าสู่ระบบด้วยเบอร์โทรศัพท์และรหัสผ่าน
  * 2. แถบสลับบทบาท:
  *    - "สำหรับแม่บ้าน (Housekeeper)"
  *    - "สำหรับหัวหน้างาน (Manager)"
  * 3. ช่องกรอกข้อมูลมาตรฐาน:
- *    - รหัสผู้ใช้งาน / รหัสพนักงาน (User ID)
+ *    - เบอร์โทรศัพท์
  *    - รหัสผ่าน (Password) พร้อมปุ่ม Toggle แสดง/ซ่อนรหัสผ่าน
  *    - ปุ่มเข้าสู่ระบบ (Primary-500)
- * 4. ระบบ Auto-fill อำนวยความสะดวกสำหรับการนำเสนออาจารย์ (Demo Mode):
- *    - เมื่อผู้ใช้คลิกหรือ Focus ที่ช่อง User ID หรือ Password
- *      * หากเลือกแท็บแม่บ้าน -> เติมรหัส "1001" และรหัสผ่านให้อัตโนมัติ
- *      * หากเลือกแท็บหัวหน้างาน -> เติมรหัส "ADMIN01" และรหัสผ่านให้อัตโนมัติ
- *    - ผู้ใช้สามารถลบหรือพิมพ์แก้ไขเองได้อย่างอิสระ
- * 5. ข้อความแนะนำสำหรับการทดสอบด้านล่างฟอร์ม (Text Muted)
+ * 4. ส่งข้อมูลเข้าสู่ระบบ Backend และรับ JWT สำหรับเรียก API ที่ต้องยืนยันตัวตน
+ * 5. ข้อความแนะนำการเข้าสู่ระบบด้านล่างฟอร์ม
  * ==============================================================================
  */
 export const LoginScreen = () => {
@@ -44,7 +40,7 @@ export const LoginScreen = () => {
   const [activeTab, setActiveTab] = useState('housekeeper');
 
   // State ค่าที่กรอกในฟอร์ม (เริ่มต้นเป็นค่าว่างเพื่อให้ดูเป็นระบบมาตรฐาน)
-  const [userId, setUserId] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
 
   // State แสดง/ซ่อนรหัสผ่าน
@@ -54,27 +50,12 @@ export const LoginScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   /**
-   * [UC-01 Helper] ฟังก์ชัน Auto-fill ข้อมูลเมื่อผู้ใช้คลิก/Focus ที่ช่อง Input
-   * ช่วยให้การนำเสนออาจารย์ในห้องเรียนทำได้อย่างรวดเร็ว ไม่ต้องพิมพ์ทีละตัว
-   */
-  const handleAutoFill = () => {
-    // เติมข้อมูลเฉพาะเมื่อช่องยังว่างอยู่ หรือผู้ใช้คลิกเพื่อความสะดวกรวดเร็ว
-    if (activeTab === 'housekeeper') {
-      if (!userId || userId === 'ADMIN01') setUserId('1001');
-      if (!password) setPassword('password123');
-    } else {
-      if (!userId || userId === '1001') setUserId('ADMIN01');
-      if (!password) setPassword('password123');
-    }
-  };
-
-  /**
    * เมื่อสลับแท็บบทบาท (แม่บ้าน vs หัวหน้างาน)
    * ปรับเปลี่ยน placeholder และเคลียร์หรือเตรียมค่าสำหรับบทบาทนั้น
    */
   const handleTabChange = (role) => {
     setActiveTab(role);
-    setUserId('');
+    setPhone('');
     setPassword('');
   };
 
@@ -82,15 +63,11 @@ export const LoginScreen = () => {
    * [UC-01] ฟังก์ชัน Submit ฟอร์มเข้าสู่ระบบ
    * ส่งรหัสพนักงาน/รหัสผู้ใช้งานเข้าตรวจสอบที่ WelfareContext
    */
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!userId.trim()) return;
-
     setIsLoading(true);
-    setTimeout(() => {
-      login(userId.trim());
-      setIsLoading(false);
-    }, 250); // เพิ่ม delay เล็กน้อยเพื่อความสมจริงของ UX
+    await login(phone, password);
+    setIsLoading(false);
   };
 
   return (
@@ -147,7 +124,7 @@ export const LoginScreen = () => {
             {/* ช่องที่ 1: รหัสผู้ใช้งาน / รหัสพนักงาน */}
             <div>
               <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
-                รหัสผู้ใช้งาน / รหัสพนักงาน (User ID) <span className="text-red-500">*</span>
+                เบอร์โทรศัพท์ <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#64748B]">
@@ -155,18 +132,16 @@ export const LoginScreen = () => {
                 </div>
                 <input
                   type="text"
-                  value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
-                  onFocus={handleAutoFill}
-                  onClick={handleAutoFill}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
                   placeholder={
                     activeTab === 'housekeeper'
-                      ? 'กรอกรหัสพนักงาน (เช่น 1001)'
-                      : 'กรอกรหัสผู้จัดการ (เช่น ADMIN01)'
+                      ? 'กรอกเบอร์โทรศัพท์ที่ลงทะเบียน'
+                      : 'กรอกเบอร์โทรศัพท์ HR'
                   }
                   className="w-full pl-9 pr-4 py-2.5 text-xs sm:text-sm bg-[#F8FAFC] focus:bg-white border border-[#E2E8F0] rounded-xl focus:ring-2 focus:ring-[#2563EB] focus:border-transparent outline-none transition-all font-medium text-[#0F172A]"
                   required
-                  autoComplete="username"
+                  autoComplete="tel"
                 />
               </div>
             </div>
@@ -184,8 +159,6 @@ export const LoginScreen = () => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  onFocus={handleAutoFill}
-                  onClick={handleAutoFill}
                   placeholder="กรอกรหัสผ่าน"
                   className="w-full pl-9 pr-10 py-2.5 text-xs sm:text-sm bg-[#F8FAFC] focus:bg-white border border-[#E2E8F0] rounded-xl focus:ring-2 focus:ring-[#2563EB] focus:border-transparent outline-none transition-all font-medium text-[#0F172A]"
                   required
@@ -215,7 +188,7 @@ export const LoginScreen = () => {
           {/* [5] ข้อความคำแนะนำสั้น ๆ ด้านล่างฟอร์ม (Text Muted) */}
           <div className="mt-5 pt-4 border-t border-[#E2E8F0] text-center">
             <p className="text-[11px] text-[#64748B] flex items-center justify-center gap-1.5">
-              <span>คลิกที่ช่องกรอกข้อมูลเพื่อเติมรหัสสำหรับทดสอบอัตโนมัติ (Demo Mode)</span>
+              <span>ใช้เบอร์โทรศัพท์และรหัสผ่านที่ลงทะเบียนไว้ในระบบ</span>
             </p>
           </div>
         </div>

@@ -40,6 +40,15 @@ func GetWelfarePolicies(c *gin.Context) {
 	c.JSON(http.StatusOK, policies)
 }
 
+func GetWelfareTypes(c *gin.Context) {
+	var welfareTypes []models.WelfareType
+	if err := config.DB.Where("status = 'active'").Find(&welfareTypes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, welfareTypes)
+}
+
 // FR-05 ยื่นคำขอสวัสดิการ และ FR-06 แนบเอกสารประกอบ
 func RequestWelfare(c *gin.Context) {
 	employeeIDRaw, _ := c.Get("employee_id")
@@ -134,7 +143,7 @@ func GetMyRequests(c *gin.Context) {
 	employeeID, _ := c.Get("employee_id")
 	var requests []models.WelfareRequest
 
-	if err := config.DB.Where("employee_id = ?", employeeID).Preload("Attachments").Order("request_date desc").Find(&requests).Error; err != nil {
+	if err := config.DB.Where("employee_id = ?", employeeID).Preload("Attachments").Preload("Approvals").Order("request_date desc").Find(&requests).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

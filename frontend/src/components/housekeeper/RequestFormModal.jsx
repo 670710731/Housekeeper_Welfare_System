@@ -31,10 +31,10 @@ export const RequestFormModal = ({ isOpen, onClose, initialWelfareId = null }) =
   const { currentUser, welfarePolicies, getUserEntitlements, submitWelfareRequest } = useWelfare();
 
   // State ฟอร์ม
-  const [selectedWelfareId, setSelectedWelfareId] = useState('WF01');
+  const [selectedWelfareId, setSelectedWelfareId] = useState('');
   const [amount, setAmount] = useState(1);
   const [reason, setReason] = useState('');
-  const [attachmentName, setAttachmentName] = useState('');
+  const [attachment, setAttachment] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // เมื่อเปิด Modal ให้ตั้งค่า Welfare ID เริ่มต้น (ถ้ามีส่งมา)
@@ -42,12 +42,12 @@ export const RequestFormModal = ({ isOpen, onClose, initialWelfareId = null }) =
     if (initialWelfareId) {
       setSelectedWelfareId(initialWelfareId);
     } else {
-      setSelectedWelfareId('WF01');
+      setSelectedWelfareId(welfarePolicies[0]?.id || '');
     }
     setAmount(1);
     setReason('');
-    setAttachmentName('');
-  }, [initialWelfareId, isOpen]);
+    setAttachment(null);
+  }, [initialWelfareId, isOpen, welfarePolicies]);
 
   if (!isOpen || !currentUser) return null;
 
@@ -68,19 +68,19 @@ export const RequestFormModal = ({ isOpen, onClose, initialWelfareId = null }) =
     !isExceedingQuota &&
     !isInvalidAmount &&
     reason.trim().length > 0 &&
-    (!selectedPolicy?.requiresAttachment || attachmentName.trim().length > 0);
+    (!selectedPolicy?.requiresAttachment || Boolean(attachment));
 
   // ส่งฟอร์ม
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isFormValid) return;
 
     setIsSubmitting(true);
-    const result = submitWelfareRequest({
+    const result = await submitWelfareRequest({
       welfareId: selectedWelfareId,
       amount: Number(amount),
       reason,
-      attachmentName
+      attachment
     });
 
     setIsSubmitting(false);
@@ -88,14 +88,6 @@ export const RequestFormModal = ({ isOpen, onClose, initialWelfareId = null }) =
       onClose();
     }
   };
-
-  // ตัวอย่างไฟล์จำลองสำหรับคลิกแนบเอกสารง่ายๆ ในการเดโม
-  const sampleAttachments = [
-    'ใบรับรองแพทย์_รพ.ศิริราช_2569.pdf',
-    'ใบเสร็จรับเงิน_คลินิกเวชกรรม.jpg',
-    'รูปถ่ายชุดปฏิบัติงานชำรุด.png',
-    'รูปถ่ายอุปกรณ์ทำความสะอาดชำรุด.jpg'
-  ];
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -245,38 +237,27 @@ export const RequestFormModal = ({ isOpen, onClose, initialWelfareId = null }) =
             </div>
 
             {/* แสดงชื่อไฟล์ที่เลือก */}
-            {attachmentName ? (
+            {attachment ? (
               <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs text-blue-900 font-medium truncate">
                   <FileText className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                  <span className="truncate">{attachmentName}</span>
+                  <span className="truncate">{attachment.name}</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setAttachmentName('')}
+                  onClick={() => setAttachment(null)}
                   className="text-xs text-red-600 hover:underline ml-2"
                 >
                   ลบ
                 </button>
               </div>
             ) : (
-              <div className="space-y-1.5">
-                <div className="text-[11px] text-[#64748B]">
-                  เลือกเอกสารหลักฐานแนบ:
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {sampleAttachments.map((file, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setAttachmentName(file)}
-                      className="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors border border-slate-200"
-                    >
-                      + {file}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(event) => setAttachment(event.target.files?.[0] || null)}
+                className="block w-full text-xs text-[#64748B] file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#2563EB] hover:file:bg-blue-100"
+              />
             )}
           </div>
 
