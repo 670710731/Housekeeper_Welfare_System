@@ -80,6 +80,13 @@ func RequestWelfare(c *gin.Context) {
 		return
 	}
 
+	// Resolve the policy so the welfare history row satisfies its foreign key.
+	var policy models.WelfarePolicy
+	if err := config.DB.Where("welfare_type_id = ? AND status = 'active'", welfareTypeID).First(&policy).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่พบเงื่อนไขสวัสดิการสำหรับรายการที่เลือก"})
+		return
+	}
+
 	tx := config.DB.Begin()
 
 	// 3. บันทึกตาราง Welfare Request (BR-03: ยังไม่มีผลต่อยอดสิทธิ์คงเหลือจนกว่าจะอนุมัติ)
@@ -129,13 +136,21 @@ func RequestWelfare(c *gin.Context) {
 		EmployeeID:       employeeID,
 		WelfareTypeID:    uint(welfareTypeID),
 		WelfareRequestID: request.WelfareRequestID,
+		PolicyID:         policy.PolicyID,
 		ActionType:       "request",
 		ActionDate:       time.Now(),
 		Description:      fmt.Sprintf("ยื่นคำขอสวัสดิการจำนวน %d หน่วย", quantity),
 	}
-	tx.Create(&history)
+	if err := tx.Create(&history).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "บันทึกประวัติคำขอไม่สำเร็จ"})
+		return
+	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ยืนยันคำขอไม่สำเร็จ"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "ส่งคำขอสำเร็จเรียบร้อย อยู่ระหว่างรอการตรวจสอบ", "request_id": request.WelfareRequestID})
 }
 
