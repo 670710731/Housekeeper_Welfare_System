@@ -40,7 +40,6 @@ func GetWelfarePolicies(c *gin.Context) {
 	c.JSON(http.StatusOK, policies)
 }
 
-// GetWelfareTypes returns the active welfare categories used by the frontend.
 func GetWelfareTypes(c *gin.Context) {
 	var welfareTypes []models.WelfareType
 	if err := config.DB.Where("status = 'active'").Find(&welfareTypes).Error; err != nil {
@@ -159,7 +158,7 @@ func GetMyRequests(c *gin.Context) {
 	employeeID, _ := c.Get("employee_id")
 	var requests []models.WelfareRequest
 
-	if err := config.DB.Where("employee_id = ?", employeeID).Preload("Attachments").Order("request_date desc").Find(&requests).Error; err != nil {
+	if err := config.DB.Where("employee_id = ?", employeeID).Preload("Attachments").Preload("Approvals").Order("request_date desc").Find(&requests).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

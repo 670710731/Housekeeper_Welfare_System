@@ -29,6 +29,17 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func main() {
+	r := gin.Default()
+	r.Use(CORSMiddleware())
+	if os.Getenv("MOCK_MODE") == "true" {
+		registerMockRoutes(r)
+		log.Println("Starting API in MOCK_MODE; data resets when the server stops.")
+		if err := r.Run(":8080"); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
 	// 1. เชื่อมต่อฐานข้อมูล PostgreSQL
 	config.ConnectDatabase()
 
@@ -39,9 +50,6 @@ func main() {
 			log.Fatal("ไม่สามารถสร้างโฟลเดอร์สำหรับเก็บอัปโหลดได้")
 		}
 	}
-
-	r := gin.Default()
-	r.Use(CORSMiddleware())
 
 	// Route สาธารณะ (Public API)
 	r.POST("/api/login", handlers.Login)                      // FR-01: เข้าสู่ระบบ
@@ -70,6 +78,10 @@ func main() {
 			// จัดการคำขอ (FR-09 & FR-10)
 			hrGroup.GET("/requests", handlers.GetAllRequests)            // ดูคำขอทั้งหมด
 			hrGroup.POST("/requests/:id/decide", handlers.DecideRequest) // อนุมัติ/ปฏิเสธ
+			hrGroup.GET("/benefits", handlers.GetAllBenefits)
+			hrGroup.PUT("/benefits/:id", handlers.UpdateBenefitQuota)
+			hrGroup.POST("/distributions", handlers.RecordDistribution)
+			hrGroup.GET("/history", handlers.GetAllHistory)
 
 			// กำหนดสิทธิ์ให้พนักงาน (FR-11)
 			hrGroup.POST("/benefits/assign", handlers.AssignBenefit)
@@ -89,12 +101,6 @@ func main() {
 		}
 	}
 
-	// ใช้ PORT ของ hosting (เช่น Render) และ fallback เป็น 8080 สำหรับรันในเครื่อง
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	if err := r.Run(":" + port); err != nil {
-		log.Fatal("ไม่สามารถเริ่มเซิร์ฟเวอร์ได้:", err)
-	}
+	// เริ่มรันเซิร์ฟเวอร์ที่ Port 8080
+	r.Run(":8080")
 }

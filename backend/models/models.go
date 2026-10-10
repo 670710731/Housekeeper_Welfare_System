@@ -64,14 +64,15 @@ type BenefitRemain struct {
 
 // 6
 type WelfareRequest struct {
-	WelfareRequestID uint         `gorm:"primaryKey;column:welfare_request_id" json:"welfare_request_id"`
-	EmployeeID       uint         `gorm:"column:employee_id" json:"employee_id"`
-	WelfareTypeID    uint         `gorm:"column:welfare_type_id" json:"welfare_type_id"`
-	RequestDate      time.Time    `gorm:"column:request_date" json:"request_date"`
-	Quantity         int          `gorm:"column:quantity" json:"quantity"`
-	Reason           string       `gorm:"column:reason" json:"reason"`
-	Status           string       `gorm:"column:status" json:"status"` // pending, approved, rejected
-	Attachments      []Attachment `gorm:"foreignKey:WelfareRequestID" json:"attachments,omitempty"`
+	WelfareRequestID uint        `gorm:"primaryKey;column:welfare_request_id" json:"welfare_request_id"`
+	EmployeeID       uint        `gorm:"column:employee_id" json:"employee_id"`
+	WelfareTypeID    uint        `gorm:"column:welfare_type_id" json:"welfare_type_id"`
+	RequestDate      time.Time   `gorm:"column:request_date" json:"request_date"`
+	Quantity         int         `gorm:"column:quantity" json:"quantity"`
+	Reason           string      `gorm:"column:reason" json:"reason"`
+	Status           string      `gorm:"column:status" json:"status"` // pending, approved, rejected
+	Attachments      []Attachment      `gorm:"foreignKey:WelfareRequestID" json:"attachments,omitempty"`
+	Approvals        []ApprovalWelfare `gorm:"foreignKey:WelfareRequestID" json:"approvals,omitempty"`
 }
 
 // 7
