@@ -44,7 +44,7 @@ func main() {
 	r.Use(CORSMiddleware())
 
 	// Route สาธารณะ (Public API)
-	r.POST("/api/login", handlers.Login) // FR-01: เข้าสู่ระบบ
+	r.POST("/api/login", handlers.Login)                      // FR-01: เข้าสู่ระบบ
 	r.GET("/attachments/:filename", handlers.ServeAttachment) // FR-15: ดึงเอกสารเพื่อเปิดอ่านบน React
 
 	// Route ที่ต้องทำการตรวจสอบสิทธิ์โทเค็น (Authenticated Routes)
@@ -54,11 +54,12 @@ func main() {
 		// ==============================
 		// ฝั่งของพนักงาน/แม่บ้าน (Employee)
 		// ==============================
-		api.GET("/my-benefits", handlers.GetMyBenefits)     // FR-02 & FR-03: สิทธิ์สวัสดิการและสิทธิ์คงเหลือ
-		api.GET("/policies", handlers.GetWelfarePolicies)   // FR-04: ดูนโยบายเงื่อนไข
-		api.POST("/requests", handlers.RequestWelfare)      // FR-05 & FR-06: ส่งคำขอพร้อมเอกสารแนบ
-		api.GET("/my-requests", handlers.GetMyRequests)     // FR-07: ตรวจสอบสถานะคำขอ
-		api.GET("/my-history", handlers.GetMyHistory)       // FR-08: ประวัติการใช้งานสวัสดิการตนเอง
+		api.GET("/my-benefits", handlers.GetMyBenefits)   // FR-02 & FR-03: สิทธิ์สวัสดิการและสิทธิ์คงเหลือ
+		api.GET("/policies", handlers.GetWelfarePolicies) // FR-04: ดูนโยบายเงื่อนไข
+		api.GET("/welfare-types", handlers.GetWelfareTypes)
+		api.POST("/requests", handlers.RequestWelfare)  // FR-05 & FR-06: ส่งคำขอพร้อมเอกสารแนบ
+		api.GET("/my-requests", handlers.GetMyRequests) // FR-07: ตรวจสอบสถานะคำขอ
+		api.GET("/my-history", handlers.GetMyHistory)   // FR-08: ประวัติการใช้งานสวัสดิการตนเอง
 
 		// ==============================
 		// ฝั่งของเจ้าหน้าที่ HR (ผู้จัดการ)
@@ -67,7 +68,7 @@ func main() {
 		hrGroup.Use(middleware.AuthMiddleware("HR")) // บังคับบทบาทเฉพาะ HR เท่านั้น (BR-06)
 		{
 			// จัดการคำขอ (FR-09 & FR-10)
-			hrGroup.GET("/requests", handlers.GetAllRequests)      // ดูคำขอทั้งหมด
+			hrGroup.GET("/requests", handlers.GetAllRequests)            // ดูคำขอทั้งหมด
 			hrGroup.POST("/requests/:id/decide", handlers.DecideRequest) // อนุมัติ/ปฏิเสธ
 
 			// กำหนดสิทธิ์ให้พนักงาน (FR-11)

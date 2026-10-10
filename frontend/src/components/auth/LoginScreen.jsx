@@ -88,7 +88,7 @@ export const LoginScreen = () => {
 
     setIsLoading(true);
     setTimeout(() => {
-      login(userId.trim());
+      login(userId.trim(), password);
       setIsLoading(false);
     }, 250); // เพิ่ม delay เล็กน้อยเพื่อความสมจริงของ UX
   };

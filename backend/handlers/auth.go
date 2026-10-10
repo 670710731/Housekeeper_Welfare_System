@@ -3,17 +3,18 @@
 package handlers
 
 import (
-	"net/http"
+	"Housekeeper_Welfare_System/config"
+	"Housekeeper_Welfare_System/middleware"
+	"Housekeeper_Welfare_System/models"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
-	"Housekeeper_Welfare_System/config"
-	"Housekeeper_Welfare_System/models"
-	"Housekeeper_Welfare_System/middleware"
+	"net/http"
 )
 
 type LoginInput struct {
-	Phone    string `json:"phone" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Identifier string `json:"identifier"`
+	Phone      string `json:"phone"`
+	Password   string `json:"password" binding:"required"`
 }
 
 // FR-01 Login
@@ -24,8 +25,20 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	identifier := input.Identifier
+	if identifier == "" {
+		identifier = input.Phone
+	}
+	// Demo aliases: keep the presentation credentials independent from
+	// the phone numbers stored in the database.
+	switch identifier {
+	case "ADMIN01":
+		identifier = "0812345678"
+	case "1001":
+		identifier = "089-111-2233"
+	}
 	var employee models.Employee
-	if err := config.DB.Where("phone = ? AND employee_status = 'active'", input.Phone).First(&employee).Error; err != nil {
+	if err := config.DB.Where("employee_status = 'active' AND (phone = ? OR employee_id::text = ?)", identifier, identifier).First(&employee).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "เบอร์โทรศัพท์หรือรหัสผ่านไม่ถูกต้อง"})
 		return
 	}
@@ -45,9 +58,9 @@ func Login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"token": token,
+		"token":       token,
 		"employee_id": employee.EmployeeID,
-		"name": employee.EmployeeName,
-		"role": employee.Role,
+		"name":        employee.EmployeeName,
+		"role":        employee.Role,
 	})
 }

@@ -18,7 +18,6 @@ type Employee struct {
 	Role           string    `gorm:"column:role" json:"role"` // Employee, HR
 }
 
-
 // 2
 type WelfareType struct {
 	WelfareTypeID      uint   `gorm:"primaryKey;column:welfare_type_id" json:"welfare_type_id"`
@@ -26,7 +25,6 @@ type WelfareType struct {
 	WelfareDescription string `gorm:"column:welfare_description" json:"welfare_description"`
 	Status             string `gorm:"column:status" json:"status"`
 }
-
 
 // 3
 type WelfarePolicy struct {
@@ -50,7 +48,6 @@ type EmployeeBenefit struct {
 	Status            string    `gorm:"column:status" json:"status"`
 }
 
-
 // 5
 type BenefitRemain struct {
 	RemainID        uint            `gorm:"primaryKey;column:remain_id" json:"remain_id"`
@@ -62,19 +59,21 @@ type BenefitRemain struct {
 	StartDate       time.Time       `gorm:"column:start_date" json:"start_date"`
 	EndDate         time.Time       `gorm:"column:end_date" json:"end_date"`
 	LastUpdate      time.Time       `gorm:"column:last_update" json:"last_update"`
-	Benefit         EmployeeBenefit `gorm:"foreignKey:BenefitID"`
+	Benefit         EmployeeBenefit `gorm:"foreignKey:BenefitID" json:"benefit"`
 }
+
 // 6
 type WelfareRequest struct {
-	WelfareRequestID uint        `gorm:"primaryKey;column:welfare_request_id" json:"welfare_request_id"`
-	EmployeeID       uint        `gorm:"column:employee_id" json:"employee_id"`
-	WelfareTypeID    uint        `gorm:"column:welfare_type_id" json:"welfare_type_id"`
-	RequestDate      time.Time   `gorm:"column:request_date" json:"request_date"`
-	Quantity         int         `gorm:"column:quantity" json:"quantity"`
-	Reason           string      `gorm:"column:reason" json:"reason"`
-	Status           string      `gorm:"column:status" json:"status"` // pending, approved, rejected
+	WelfareRequestID uint         `gorm:"primaryKey;column:welfare_request_id" json:"welfare_request_id"`
+	EmployeeID       uint         `gorm:"column:employee_id" json:"employee_id"`
+	WelfareTypeID    uint         `gorm:"column:welfare_type_id" json:"welfare_type_id"`
+	RequestDate      time.Time    `gorm:"column:request_date" json:"request_date"`
+	Quantity         int          `gorm:"column:quantity" json:"quantity"`
+	Reason           string       `gorm:"column:reason" json:"reason"`
+	Status           string       `gorm:"column:status" json:"status"` // pending, approved, rejected
 	Attachments      []Attachment `gorm:"foreignKey:WelfareRequestID" json:"attachments,omitempty"`
 }
+
 // 7
 type Attachment struct {
 	AttachmentID     uint      `gorm:"primaryKey;column:attachment_id" json:"attachment_id"`
@@ -85,6 +84,7 @@ type Attachment struct {
 	UploadDate       time.Time `gorm:"column:upload_date" json:"upload_date"`
 	Status           string    `gorm:"column:status" json:"status"`
 }
+
 // 8
 type ApprovalWelfare struct {
 	ApprovalID         uint      `gorm:"primaryKey;column:approval_id" json:"approval_id"`
@@ -94,6 +94,7 @@ type ApprovalWelfare struct {
 	ApprovalStatus     string    `gorm:"column:approval_status" json:"approval_status"`
 	Notes              string    `gorm:"column:notes" json:"notes"`
 }
+
 // 9
 type WelfareHistory struct {
 	WelfareHistoryID uint      `gorm:"primaryKey;column:welfare_history_id" json:"welfare_history_id"`

@@ -71,12 +71,12 @@ export const RequestFormModal = ({ isOpen, onClose, initialWelfareId = null }) =
     (!selectedPolicy?.requiresAttachment || attachmentName.trim().length > 0);
 
   // ส่งฟอร์ม
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isFormValid) return;
 
     setIsSubmitting(true);
-    const result = submitWelfareRequest({
+    const result = await submitWelfareRequest({
       welfareId: selectedWelfareId,
       amount: Number(amount),
       reason,

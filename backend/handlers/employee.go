@@ -40,6 +40,16 @@ func GetWelfarePolicies(c *gin.Context) {
 	c.JSON(http.StatusOK, policies)
 }
 
+// GetWelfareTypes returns the active welfare categories used by the frontend.
+func GetWelfareTypes(c *gin.Context) {
+	var welfareTypes []models.WelfareType
+	if err := config.DB.Where("status = 'active'").Find(&welfareTypes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, welfareTypes)
+}
+
 // FR-05 ยื่นคำขอสวัสดิการ และ FR-06 แนบเอกสารประกอบ
 func RequestWelfare(c *gin.Context) {
 	employeeIDRaw, _ := c.Get("employee_id")
@@ -92,7 +102,7 @@ func RequestWelfare(c *gin.Context) {
 	if file != nil {
 		filename := fmt.Sprintf("%d_%d_%s", request.WelfareRequestID, time.Now().Unix(), filepath.Base(file.Filename))
 		savePath := filepath.Join("./uploads", filename)
-		
+
 		if err := c.SaveUploadedFile(file, savePath); err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "บันทึกไฟล์เอกสารล้มเหลว"})
@@ -140,7 +150,6 @@ func GetMyRequests(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, requests)
 }
-
 
 // FR-08 ดูประวัติการใช้งาน/การขอสวัสดิการของตนเอง
 func GetMyHistory(c *gin.Context) {
