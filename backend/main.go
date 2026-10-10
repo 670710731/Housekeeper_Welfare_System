@@ -89,6 +89,12 @@ func main() {
 		}
 	}
 
-	// เริ่มรันเซิร์ฟเวอร์ที่ Port 8080
-	r.Run(":8080")
+	// ใช้ PORT ของ hosting (เช่น Render) และ fallback เป็น 8080 สำหรับรันในเครื่อง
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	if err := r.Run(":" + port); err != nil {
+		log.Fatal("ไม่สามารถเริ่มเซิร์ฟเวอร์ได้:", err)
+	}
 }
