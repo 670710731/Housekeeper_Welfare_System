@@ -101,7 +101,7 @@ type WelfareHistory struct {
 	EmployeeID       uint      `gorm:"column:employee_id" json:"employee_id"`
 	WelfareTypeID    uint      `gorm:"column:welfare_type_id" json:"welfare_type_id"`
 	WelfareRequestID uint      `gorm:"column:welfare_request_id" json:"welfare_request_id"`
-	ApprovalID       uint      `gorm:"column:approval_id" json:"approval_id"`
+	ApprovalID       *uint     `gorm:"column:approval_id" json:"approval_id,omitempty"`
 	PolicyID         uint      `gorm:"column:policy_id" json:"policy_id"`
 	ActionType       string    `gorm:"column:action_type" json:"action_type"`
 	ActionDate       time.Time `gorm:"column:action_date" json:"action_date"`

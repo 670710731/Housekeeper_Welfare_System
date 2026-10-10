@@ -111,7 +111,7 @@ func DecideRequest(c *gin.Context) {
 		EmployeeID:       request.EmployeeID,
 		WelfareTypeID:    request.WelfareTypeID,
 		WelfareRequestID: request.WelfareRequestID,
-		ApprovalID:       approval.ApprovalID,
+		ApprovalID:       &approval.ApprovalID,
 		ActionType:       input.Status,
 		ActionDate:       time.Now(),
 		Description:      fmt.Sprintf("คำขอได้รับการ %s โดย HR: %s", input.Status, input.Notes),
